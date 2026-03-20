@@ -20,7 +20,7 @@ from evals.solvers import split_message_solver
 DATA_PATH = Path(__file__).parent.parent / "data" / "dataset.csv"
 
 
-def load_splittable_samples() -> list[dict]:
+def load_splittable_samples(min_split_quality: int | None = None) -> list[dict]:
     """Load only samples that were successfully split."""
     with open(DATA_PATH, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -28,6 +28,10 @@ def load_splittable_samples() -> list[dict]:
         for row in reader:
             # Only include rows with valid chunks
             if row.get("chunks") and row.get("num_chunks") and int(row["num_chunks"]) > 0:
+                if min_split_quality is not None:
+                    sq = row.get("split_quality", "")
+                    if not sq or int(sq) < min_split_quality:
+                        continue
                 rows.append(row)
     return rows
 
@@ -85,9 +89,12 @@ def make_split_message_samples(rows: list[dict]) -> list[Sample]:
 
 
 @task
-def single_message_eval(grader_model: str = "openrouter/google/gemini-2.0-flash-001"):
+def single_message_eval(
+    grader_model: str = "openrouter/google/gemini-2.0-flash-001",
+    min_split_quality: int | None = None,
+):
     """Evaluate refusal rates when adversarial prompts are sent as a single message."""
-    rows = load_splittable_samples()
+    rows = load_splittable_samples(min_split_quality=min_split_quality)
     samples = make_single_message_samples(rows)
     return Task(
         dataset=MemoryDataset(samples=samples, name="fortress-single"),
@@ -97,9 +104,12 @@ def single_message_eval(grader_model: str = "openrouter/google/gemini-2.0-flash-
 
 
 @task
-def split_message_eval(grader_model: str = "openrouter/google/gemini-2.0-flash-001"):
+def split_message_eval(
+    grader_model: str = "openrouter/google/gemini-2.0-flash-001",
+    min_split_quality: int | None = None,
+):
     """Evaluate refusal rates when adversarial prompts are split across multiple turns."""
-    rows = load_splittable_samples()
+    rows = load_splittable_samples(min_split_quality=min_split_quality)
     samples = make_split_message_samples(rows)
     return Task(
         dataset=MemoryDataset(samples=samples, name="fortress-split"),
